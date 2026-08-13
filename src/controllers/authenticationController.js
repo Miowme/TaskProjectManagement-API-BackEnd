@@ -1,7 +1,9 @@
 import User from "../models/User.js";
 import { formatJoiErrors } from "../utils/FormatJoiErrors.js";
 import { registerValidation } from "../validations/authenticationValidation.js";
+import { loginValidation } from "../validations/authenticationValidation.js";
 import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
 
 export const register = async (req, res) => {
   const { error } = registerValidation.validate(req.body, {
@@ -34,6 +36,58 @@ export const register = async (req, res) => {
 
     return res.status(201).json({
       message: "User registered successfully",
+      user,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      message: "Internal server error",
+    });
+  }
+};
+
+export const login = async (req, res) => {
+  const { error } = loginValidation.validate(req.body, { abortEarly: false });
+
+  if (error) {
+    const errors = formatJoiErrors(error);
+    return res.status(400).json({
+      message: "Validation errors",
+      errors,
+    });
+  }
+
+  const { email, password } = req.body;
+
+  try {
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(400).json({
+        message: "Invalid Credentials",
+      });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+
+    if (!isMatch) {
+      return res.status(400).json({
+        message: "Invalid Credentials",
+      });
+    }
+
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
+      expiresIn: "1d",
+    });
+
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "none",
+    });
+
+    return res.status(200).json({
+      message: "Login successful",
       user,
     });
   } catch (error) {
